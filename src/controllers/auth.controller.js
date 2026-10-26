@@ -1,4 +1,4 @@
-   //User regsiter
+﻿   //User regsiter
 
    import { asynchandler } from "../utils/asynchandler.js";
    import { Apierror } from "../utils/api-error.js";
@@ -26,6 +26,7 @@
    const coverImage=req.files?.coverImage?.[0]?.buffer
    let result1;
    let result2;
+   let user;
    try {
       result1= await uploadOnCloudinary(avatar,"avatars");
       const avatarUrl=result1.secure_url;
@@ -34,7 +35,7 @@
    
    
    
-      const user=await User.create({
+      user=await User.create({
          email:email,
          fullname:fullname,
          username:username,
@@ -82,9 +83,12 @@
    if(result2){
       await DeleteFromCloudinary(result2.public_id);
    }
+   // Roll back the committed user record so the unique email/username is freed
+   if(user?._id){
+      await User.findByIdAndDelete(user._id);
+   }
    console.log(error);
-   console.log("Successfully deleted")
-   throw new Apierror(500,"Something went wrong and files are deleted")
+   throw new Apierror(500,"Registration failed. Please try again.")
    }
    })
 
@@ -104,6 +108,10 @@
    const isMatched=await existedUser.isPasswordCorrect(password);
    if(!isMatched){
       throw new Apierror(400,"Password is wrong",[])
+   }
+   // Block login until email is verified
+   if(!existedUser.isEmailVerified){
+      throw new Apierror(403,"Your email is not verified. Please check your inbox and click the verification link sent during registration.")
    }
    req.session.regenerate((err)=>{
       if(err){
